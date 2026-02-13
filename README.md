@@ -2,6 +2,7 @@
 
 This repository contains the Azure Machine Learning feature engineering pipeline for transforming Amazon Electronics review text into machine-learning features. The pipeline computes text-based features and registers them in the Azure ML Feature Store for reuse in downstream modeling.
 
+Codes on the other branch.
 
 #### Project Structure
 ```
