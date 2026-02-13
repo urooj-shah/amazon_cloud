@@ -1,0 +1,10 @@
+channels:
+  - conda-forge
+dependencies:
+  - python=3.8
+  - pip
+  - pip:
+      - torch==2.0.1
+      - sentence-transformers
+      - pandas
+      - pyarrow
