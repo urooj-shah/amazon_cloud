@@ -1,0 +1,31 @@
+trigger:
+  branches:
+    include:
+      - lab5_model_training
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  AZURE_SUBSCRIPTION: SC-UDST-CCIT-DSAI3202-1
+  RESOURCE_GROUP: Project
+  WORKSPACE_NAME: 60300832-test
+
+steps:
+- checkout: self
+
+- task: AzureCLI@2
+  displayName: Submit Azure ML Training Job
+  inputs:
+    azureSubscription: $(AZURE_SUBSCRIPTION)
+    scriptType: bash
+    scriptLocation: inlineScript
+    inlineScript: |
+      echo "Installing Azure ML CLI extension..."
+      az extension add -n ml -y
+
+      echo "Submitting training job..."
+      az ml job create \
+        --file lab5/jobs/train_job.yml \
+        --resource-group $(RESOURCE_GROUP) \
+        --workspace-name $(WORKSPACE_NAME)

@@ -1,0 +1,32 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandJob.schema.json
+type: command
+
+display_name: amazon_review_model_training
+experiment_name: amazon_review_training_experiment
+
+code: ../src
+
+command: >
+  python train.py
+  --feature_data ${{inputs.feature_data}}
+  --label_data ${{inputs.label_data}}
+  --output ${{outputs.model_output}}
+
+inputs:
+  feature_data:
+    type: uri_folder
+    path: azureml:amazon_review_merged_features_train@latest
+
+  label_data:
+    type: uri_folder
+    path: azureml:amazon_electronics_features_v1_sampled@latest
+
+outputs:
+  model_output:
+    type: uri_folder
+
+environment:
+  image: mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu20.04
+  conda_file: ../env/conda.yml
+
+compute: azureml:cpu-cluster-2
