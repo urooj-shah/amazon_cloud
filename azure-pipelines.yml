@@ -15,17 +15,19 @@ steps:
 - checkout: self
 
 - task: AzureCLI@2
-  displayName: Submit Azure ML Training Job
+  displayName: "Submit Azure ML Training Job"
   inputs:
     azureSubscription: $(AZURE_SUBSCRIPTION)
     scriptType: bash
     scriptLocation: inlineScript
     inlineScript: |
-      echo "Installing Azure ML CLI extension..."
-      az extension add -n ml -y
+      echo "Ensuring Azure ML CLI extension is installed"
+      az extension add -n ml -y || az extension update -n ml
 
-      echo "Submitting training job..."
-      az ml job create \
-        --file lab5/jobs/train_job.yml \
-        --resource-group $(RESOURCE_GROUP) \
-        --workspace-name $(WORKSPACE_NAME)
+      echo "Setting Azure ML defaults"
+      az configure --defaults \
+        group=$(RESOURCE_GROUP) \
+        workspace=$(WORKSPACE_NAME)
+
+      echo "Submitting Azure ML job"
+      az ml job create --file lab5/jobs/train_job.yml
