@@ -54,7 +54,7 @@ def main():
         for i in range(sbert_pq.num_row_groups):
             table = sbert_pq.read_row_group(
                 i,
-                columns=["asin", "reviewerID", "sbert_vector"]
+                columns=["asin", "reviewerID", "overall", "sbert_vector"]
             )
             chunk = table.to_pandas()
             chunk = chunk.set_index(["asin", "reviewerID"])

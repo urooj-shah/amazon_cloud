@@ -16,19 +16,10 @@ def parse_args():
     return parser.parse_args()
 
 
-def sparse_to_index_value_list(X):
-    """Convert CSR sparse matrix rows into (index, value) lists."""
-    rows = []
-    for i in range(X.shape[0]):
-        row = X[i]
-        rows.append(list(zip(row.indices.tolist(), row.data.tolist())))
-    return rows
-
-
 def add_tfidf_column(df, vectorizer):
     X = vectorizer.transform(df["reviewText"].astype(str))
     df = df.copy()
-    df["tfidf_vector"] = sparse_to_index_value_list(X)
+    df["tfidf_vector"] = X.toarray().tolist()   # ✅ FIXED-LENGTH
     return df
 
 

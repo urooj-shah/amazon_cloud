@@ -3,8 +3,7 @@ import os
 import pandas as pd
 from nltk.sentiment import SentimentIntensityAnalyzer
 import nltk
-nltk.data.path.append("/tmp/nltk_data")
-nltk.download("vader_lexicon", download_dir="/tmp/nltk_data")
+
 
 
 
@@ -16,6 +15,13 @@ def parse_args():
 
 
 def main():
+    
+    nltk.data.path.append("/tmp/nltk_data")
+    try:
+        nltk.data.find("sentiment/vader_lexicon.zip")
+    except LookupError:
+        nltk.download("vader_lexicon", download_dir="/tmp/nltk_data")
+
     args = parse_args()
 
     df = pd.read_parquet(args.data)

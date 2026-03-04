@@ -1,0 +1,25 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+
+name: sample_dataset
+display_name: Sample Dataset
+type: command
+
+inputs:
+  data:
+    type: uri_folder
+  n_rows:
+    type: integer
+    default: 400000
+
+outputs:
+  out:
+    type: uri_folder
+
+code: .
+command: >
+  python sample.py
+  --data ${{inputs.data}}
+  --out ${{outputs.out}}
+  --n_rows ${{inputs.n_rows}}
+
+environment: azureml:AzureML-sklearn-1.1-ubuntu20.04-py38-cpu@latest

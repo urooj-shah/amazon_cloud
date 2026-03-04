@@ -14,7 +14,6 @@ def parse_args():
     parser.add_argument("--data", type=str, required=True)
     parser.add_argument("--out", type=str, required=True)
     parser.add_argument("--model_name", type=str, default="all-MiniLM-L6-v2")
-    parser.add_argument("--max_rows", type=int, default=300_000)
     parser.add_argument("--chunk_size", type=int, default=10_000)
     parser.add_argument("--batch_size", type=int, default=16)
     return parser.parse_args()
@@ -34,13 +33,9 @@ def main():
 
     df = pd.read_parquet(input_path)
 
-    # Basic filtering
+    # Basic filtering (safe + deterministic)
     df = df[df["reviewText"].notna()]
     df = df[df["reviewText"].str.len() > 0]
-
-    # Cap rows for SBERT
-    if len(df) > args.max_rows:
-        df = df.sample(n=args.max_rows, random_state=42)
 
     model = SentenceTransformer(
         args.model_name,
