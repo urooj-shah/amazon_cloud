@@ -2,8 +2,8 @@ $schema: https://azuremlschemas.azureedge.net/latest/datastore.schema.json
 name: blobkey
 type: azure_blob
 
-account_name: <storage_account>
+account_name: amazon60300832
 container_name: curated
 
 credentials:
-  account_key: <SUPER_SECRET_KEY>
+  account_key: <super secret key>
