@@ -38,10 +38,6 @@ def parse_args():
 # --------------------------------------------------
 
 def load_dataset(folder_path: str) -> pd.DataFrame:
-    """
-    Loads a parquet dataset from an Azure ML uri_folder.
-    Works whether the folder contains shards or a single file.
-    """
     return pd.read_parquet(folder_path)
 
 
@@ -50,16 +46,11 @@ def load_dataset(folder_path: str) -> pd.DataFrame:
 # --------------------------------------------------
 
 def create_binary_labels(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Convert Amazon review ratings to binary sentiment.
-    """
+
     if "overall" not in df.columns:
-        raise RuntimeError(
-            "Column 'overall' not found in merged dataset."
-        )
+        raise RuntimeError("Column 'overall' not found.")
 
     df = df[df["overall"].isin([1, 2, 4, 5])].copy()
-
     df["label"] = (df["overall"] >= 4).astype(int)
 
     return df
@@ -70,16 +61,34 @@ def create_binary_labels(df: pd.DataFrame) -> pd.DataFrame:
 # --------------------------------------------------
 
 def build_feature_matrix(df: pd.DataFrame) -> np.ndarray:
-    """
-    Convert SBERT vectors into a numpy matrix.
-    """
 
-    if "sbert_vector" not in df.columns:
-        raise RuntimeError("Column 'sbert_vector' missing.")
+    # SBERT embeddings
+    sbert_vectors = np.vstack(df["sbert_vector"].apply(np.array).values)
 
-    vectors = df["sbert_vector"].apply(np.array)
+    # Sentiment features
+    sentiment_features = df[
+        [
+            "sentiment_pos",
+            "sentiment_neg",
+            "sentiment_neu",
+            "sentiment_compound"
+        ]
+    ].values
 
-    X = np.vstack(vectors.values)
+    # Length features
+    length_features = df[
+        [
+            "review_length_chars",
+            "review_length_words"
+        ]
+    ].values
+
+    # Combine all features
+    X = np.hstack([
+        sbert_vectors,
+        sentiment_features,
+        length_features
+    ])
 
     return X
 
@@ -156,8 +165,8 @@ def main():
     # --------------------------------------------------
 
     mlflow.log_param("model", "SGDClassifier_logistic")
-    mlflow.log_param("feature_type", "sbert")
-    mlflow.log_param("embedding_dimension", int(X_train.shape[1]))
+    mlflow.log_param("feature_type", "sbert+sentiment+length")
+    mlflow.log_param("feature_dimension", int(X_train.shape[1]))
 
     mlflow.log_param("train_rows", int(X_train.shape[0]))
     mlflow.log_param("val_rows", int(X_val.shape[0]))
