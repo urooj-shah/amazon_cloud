@@ -61,18 +61,45 @@ def create_binary_labels(df):
 # --------------------------------------------------
 
 def build_tfidf_matrix(series):
-
     # Determine TF-IDF dimension from the data
-    max_index = 0
+    max_index = -1
+
+    def is_empty_row(r) -> bool:
+        if r is None:
+            return True
+        # pandas may store missing as NaN (float) in object columns
+        try:
+            if pd.isna(r):
+                return True
+        except Exception:
+            pass
+        # handle list/np.ndarray
+        try:
+            return len(r) == 0
+        except TypeError:
+            # not sized
+            return True
+
     for row in series:
-        if row:
-            max_index = max(max_index, max(idx for idx, _ in row))
+        if is_empty_row(row):
+            continue
+
+        # if it's a numpy array of pairs, iter(row) works too
+        # row should be iterable of (idx, val)
+        for idx, _ in row:
+            if idx > max_index:
+                max_index = idx
 
     dim = max_index + 1
+    if dim <= 0:
+        # no tfidf features found; return empty 2D matrix with 0 cols
+        return np.zeros((len(series), 0), dtype=np.float32)
 
     X = np.zeros((len(series), dim), dtype=np.float32)
 
     for i, row in enumerate(series):
+        if is_empty_row(row):
+            continue
         for idx, val in row:
             X[i, idx] = val
 
