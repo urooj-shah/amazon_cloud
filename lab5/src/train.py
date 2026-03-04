@@ -61,47 +61,88 @@ def create_binary_labels(df):
 # --------------------------------------------------
 
 def build_tfidf_matrix(series):
-    # Determine TF-IDF dimension from the data
-    max_index = -1
+    """
+    Accepts tfidf vectors stored either as:
+      1) sparse list/array of (idx, val) pairs: [(12, 0.3), (98, 0.1)]
+      2) dense vector: [0.0, 0.1, 0.0, ...] or np.ndarray([...])
 
-    def is_empty_row(r) -> bool:
-        if r is None:
+    Any None/NaN/float values are treated as empty vectors.
+    """
+    def is_missing(x):
+        if x is None:
             return True
-        # pandas may store missing as NaN (float) in object columns
+        # pd.isna works for NaN and also for some pandas missing markers
         try:
-            if pd.isna(r):
-                return True
+            return bool(pd.isna(x))
         except Exception:
-            pass
-        # handle list/np.ndarray
-        try:
-            return len(r) == 0
-        except TypeError:
-            # not sized
-            return True
+            return False
+
+    # First pass: detect format and dimension
+    max_index = -1
+    dense_dim = None
+    detected_dense = False
+    detected_sparse = False
 
     for row in series:
-        if is_empty_row(row):
+        if is_missing(row):
             continue
 
-        # if it's a numpy array of pairs, iter(row) works too
-        # row should be iterable of (idx, val)
-        for idx, _ in row:
-            if idx > max_index:
-                max_index = idx
+        # If row is a single float, treat as missing/empty
+        if isinstance(row, (float, np.floating)):
+            continue
 
+        arr = row
+        # Convert to numpy array if it's a list-like
+        if isinstance(row, (list, tuple, np.ndarray)):
+            try:
+                # If it looks like a dense numeric vector (1D numbers)
+                a = np.asarray(row, dtype=np.float32)
+                # If this succeeds and is 1D, it's probably dense
+                if a.ndim == 1 and (len(a) > 0):
+                    detected_dense = True
+                    dense_dim = len(a) if dense_dim is None else max(dense_dim, len(a))
+                    continue
+            except Exception:
+                pass
+
+        # Otherwise try sparse: iterable of pairs
+        try:
+            for item in row:
+                idx, val = item  # must be a 2-tuple
+                detected_sparse = True
+                if idx > max_index:
+                    max_index = idx
+        except Exception:
+            # Unknown format: skip or raise
+            # I'd raise to make data issues obvious:
+            raise TypeError(f"Unsupported tfidf_vector row type: {type(row)} value={row}")
+
+    # Decide which representation to use
+    if detected_dense and not detected_sparse:
+        dim = dense_dim or 0
+        X = np.zeros((len(series), dim), dtype=np.float32)
+        for i, row in enumerate(series):
+            if is_missing(row) or isinstance(row, (float, np.floating)):
+                continue
+            v = np.asarray(row, dtype=np.float32).reshape(-1)
+            X[i, :len(v)] = v
+        return X
+
+    # If sparse (or mixed), use sparse logic
     dim = max_index + 1
     if dim <= 0:
-        # no tfidf features found; return empty 2D matrix with 0 cols
         return np.zeros((len(series), 0), dtype=np.float32)
 
     X = np.zeros((len(series), dim), dtype=np.float32)
-
     for i, row in enumerate(series):
-        if is_empty_row(row):
+        if is_missing(row) or isinstance(row, (float, np.floating)):
             continue
-        for idx, val in row:
-            X[i, idx] = val
+        try:
+            for idx, val in row:
+                X[i, idx] = val
+        except Exception:
+            # If mixed types exist, treat non-sparse rows as empty
+            continue
 
     return X
 
