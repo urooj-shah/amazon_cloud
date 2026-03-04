@@ -2,7 +2,7 @@ $schema: https://azuremlschemas.azureedge.net/latest/commandJob.schema.json
 type: command
 
 display_name: amazon_review_model_training
-experiment_name: amazon_review_training_experiment
+experiment_name: all features expiriment (sbert+tfidf+sentiment+length)
 
 code: ../src
 

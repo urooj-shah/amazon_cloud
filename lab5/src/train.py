@@ -37,7 +37,7 @@ def parse_args():
 # Data loading
 # --------------------------------------------------
 
-def load_dataset(folder_path: str) -> pd.DataFrame:
+def load_dataset(folder_path: str):
     return pd.read_parquet(folder_path)
 
 
@@ -45,7 +45,7 @@ def load_dataset(folder_path: str) -> pd.DataFrame:
 # Label creation
 # --------------------------------------------------
 
-def create_binary_labels(df: pd.DataFrame) -> pd.DataFrame:
+def create_binary_labels(df):
 
     if "overall" not in df.columns:
         raise RuntimeError("Column 'overall' not found.")
@@ -57,13 +57,39 @@ def create_binary_labels(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # --------------------------------------------------
+# TF-IDF reconstruction
+# --------------------------------------------------
+
+def build_tfidf_matrix(series):
+
+    # Determine TF-IDF dimension from the data
+    max_index = 0
+    for row in series:
+        if row:
+            max_index = max(max_index, max(idx for idx, _ in row))
+
+    dim = max_index + 1
+
+    X = np.zeros((len(series), dim), dtype=np.float32)
+
+    for i, row in enumerate(series):
+        for idx, val in row:
+            X[i, idx] = val
+
+    return X
+
+
+# --------------------------------------------------
 # Feature matrix
 # --------------------------------------------------
 
-def build_feature_matrix(df: pd.DataFrame) -> np.ndarray:
+def build_feature_matrix(df):
 
     # SBERT embeddings
     sbert_vectors = np.vstack(df["sbert_vector"].apply(np.array).values)
+
+    # TF-IDF vectors
+    tfidf_vectors = build_tfidf_matrix(df["tfidf_vector"])
 
     # Sentiment features
     sentiment_features = df[
@@ -86,6 +112,7 @@ def build_feature_matrix(df: pd.DataFrame) -> np.ndarray:
     # Combine all features
     X = np.hstack([
         sbert_vectors,
+        tfidf_vectors,
         sentiment_features,
         length_features
     ])
@@ -165,7 +192,7 @@ def main():
     # --------------------------------------------------
 
     mlflow.log_param("model", "SGDClassifier_logistic")
-    mlflow.log_param("feature_type", "sbert+sentiment+length")
+    mlflow.log_param("feature_type", "sbert+tfidf+sentiment+length")
     mlflow.log_param("feature_dimension", int(X_train.shape[1]))
 
     mlflow.log_param("train_rows", int(X_train.shape[0]))
