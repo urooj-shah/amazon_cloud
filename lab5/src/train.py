@@ -1,146 +1,215 @@
 import argparse
 import os
 import time
-import glob
 
-import azureml.mlflow  #  REQUIRED: activates Azure ML MLflow integration
+import azureml.mlflow
 import mlflow
 import joblib
 import numpy as np
 import pandas as pd
 
 from sklearn.linear_model import SGDClassifier
-from sklearn.metrics import accuracy_score, roc_auc_score
-from sklearn.model_selection import train_test_split
+from sklearn.metrics import (
+    accuracy_score,
+    roc_auc_score,
+    precision_score,
+    recall_score,
+    f1_score
+)
 
 
 # --------------------------------------------------
 # Argument parsing
 # --------------------------------------------------
+
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--feature_data", type=str, required=True)
-    parser.add_argument("--label_data", type=str, required=True)
+
+    parser.add_argument("--train_data", type=str, required=True)
+    parser.add_argument("--val_data", type=str, required=True)
+    parser.add_argument("--test_data", type=str, required=True)
     parser.add_argument("--output", type=str, required=True)
+
     return parser.parse_args()
 
 
 # --------------------------------------------------
-# Feature utilities
+# Data loading
 # --------------------------------------------------
-def build_features(df):
-    # SBERT embeddings are fixed-length
-    return np.vstack(df["sbert_vector"].values)
+
+def load_dataset(folder_path: str) -> pd.DataFrame:
+    """
+    Loads a parquet dataset from an Azure ML uri_folder.
+    Works whether the folder contains shards or a single file.
+    """
+    return pd.read_parquet(folder_path)
 
 
 # --------------------------------------------------
-# Main training logic
+# Label creation
 # --------------------------------------------------
-def main():
-    args = parse_args()
-    start_time = time.time()
 
-    # --------------------------------------------------
-    # Load merged feature data
-    # --------------------------------------------------
-    feature_df = pd.read_parquet(
-        os.path.join(args.feature_data, "data.parquet")
-    )
+def create_binary_labels(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Convert Amazon review ratings to binary sentiment.
+    """
+    if "overall" not in df.columns:
+        raise RuntimeError(
+            "Column 'overall' not found in merged dataset."
+        )
 
-    # --------------------------------------------------
-    # Load label data (multiple parquet shards)
-    # --------------------------------------------------
-    label_files = glob.glob(os.path.join(args.label_data, "*.parquet"))
-    if not label_files:
-        raise RuntimeError("No parquet files found in label_data")
-
-    label_df = pd.concat(
-        (
-            pd.read_parquet(f, columns=["asin", "reviewerID", "overall"])
-            for f in label_files
-        ),
-        ignore_index=True,
-    )
-
-    # --------------------------------------------------
-    # Join features + labels
-    # --------------------------------------------------
-    df = feature_df.merge(
-        label_df,
-        on=["asin", "reviewerID"],
-        how="inner",
-    )
-
-    # --------------------------------------------------
-    # Sample to avoid OOM (critical)
-    # --------------------------------------------------
-    MAX_ROWS = 100_000
-    df = df.sample(n=min(len(df), MAX_ROWS), random_state=42)
-
-    # --------------------------------------------------
-    # Binary labels
-    # --------------------------------------------------
     df = df[df["overall"].isin([1, 2, 4, 5])].copy()
+
     df["label"] = (df["overall"] >= 4).astype(int)
 
-    # --------------------------------------------------
-    # Feature matrix
-    # --------------------------------------------------
-    X = build_features(df)
-    y = df["label"].values
+    return df
+
+
+# --------------------------------------------------
+# Feature matrix
+# --------------------------------------------------
+
+def build_feature_matrix(df: pd.DataFrame) -> np.ndarray:
+    """
+    Convert SBERT vectors into a numpy matrix.
+    """
+
+    if "sbert_vector" not in df.columns:
+        raise RuntimeError("Column 'sbert_vector' missing.")
+
+    vectors = df["sbert_vector"].apply(np.array)
+
+    X = np.vstack(vectors.values)
+
+    return X
+
+
+# --------------------------------------------------
+# Evaluation
+# --------------------------------------------------
+
+def evaluate(model, X, y, split_name):
+
+    y_pred = model.predict(X)
+    y_proba = model.predict_proba(X)[:, 1]
+
+    accuracy = accuracy_score(y, y_pred)
+    auc = roc_auc_score(y, y_proba)
+    precision = precision_score(y, y_pred)
+    recall = recall_score(y, y_pred)
+    f1 = f1_score(y, y_pred)
+
+    mlflow.log_metric(f"{split_name}_accuracy", accuracy)
+    mlflow.log_metric(f"{split_name}_auc", auc)
+    mlflow.log_metric(f"{split_name}_precision", precision)
+    mlflow.log_metric(f"{split_name}_recall", recall)
+    mlflow.log_metric(f"{split_name}_f1", f1)
+
+    print("\n", split_name.upper(), "METRICS")
+    print("Accuracy :", accuracy)
+    print("AUC      :", auc)
+    print("Precision:", precision)
+    print("Recall   :", recall)
+    print("F1       :", f1)
+
+
+# --------------------------------------------------
+# Main
+# --------------------------------------------------
+
+def main():
+
+    args = parse_args()
+
+    start_time = time.time()
+
+    print("Loading datasets...")
+
+    train_df = load_dataset(args.train_data)
+    val_df = load_dataset(args.val_data)
+    test_df = load_dataset(args.test_data)
+
+    print("Preparing labels...")
+
+    train_df = create_binary_labels(train_df)
+    val_df = create_binary_labels(val_df)
+    test_df = create_binary_labels(test_df)
+
+    print("Building feature matrices...")
+
+    X_train = build_feature_matrix(train_df)
+    y_train = train_df["label"].values
+
+    X_val = build_feature_matrix(val_df)
+    y_val = val_df["label"].values
+
+    X_test = build_feature_matrix(test_df)
+    y_test = test_df["label"].values
+
+    print("\nDataset shapes")
+    print("Train:", X_train.shape)
+    print("Val  :", X_val.shape)
+    print("Test :", X_test.shape)
 
     # --------------------------------------------------
-    # Train / test split
+    # Log dataset info
     # --------------------------------------------------
-    X_train, X_test, y_train, y_test = train_test_split(
-        X,
-        y,
-        test_size=0.2,
-        random_state=42,
-        stratify=y,
-    )
+
+    mlflow.log_param("model", "SGDClassifier_logistic")
+    mlflow.log_param("feature_type", "sbert")
+    mlflow.log_param("embedding_dimension", int(X_train.shape[1]))
+
+    mlflow.log_param("train_rows", int(X_train.shape[0]))
+    mlflow.log_param("val_rows", int(X_val.shape[0]))
+    mlflow.log_param("test_rows", int(X_test.shape[0]))
 
     # --------------------------------------------------
     # Model training
     # --------------------------------------------------
+
+    print("\nTraining model...")
+
     model = SGDClassifier(
         loss="log_loss",
         max_iter=1000,
         tol=1e-3,
-        random_state=42,
+        random_state=42
     )
+
     model.fit(X_train, y_train)
 
     # --------------------------------------------------
     # Evaluation
     # --------------------------------------------------
-    y_pred = model.predict(X_test)
-    y_proba = model.predict_proba(X_test)[:, 1]
 
-    accuracy = accuracy_score(y_test, y_pred)
-    auc = roc_auc_score(y_test, y_proba)
-
-    mlflow.log_metric("accuracy", accuracy)
-    mlflow.log_metric("auc", auc)
+    evaluate(model, X_train, y_train, "train")
+    evaluate(model, X_val, y_val, "val")
+    evaluate(model, X_test, y_test, "test")
 
     # --------------------------------------------------
     # Save model
     # --------------------------------------------------
+
+    print("\nSaving model...")
+
     os.makedirs(args.output, exist_ok=True)
+
     model_path = os.path.join(args.output, "model.pkl")
+
     joblib.dump(model, model_path)
+
     mlflow.log_artifact(model_path)
 
     # --------------------------------------------------
-    # Runtime metric
+    # Runtime
     # --------------------------------------------------
+
     runtime = time.time() - start_time
+
     mlflow.log_metric("training_runtime_seconds", runtime)
 
-    print("Training complete.")
-    print(f"Accuracy: {accuracy:.4f}")
-    print(f"AUC: {auc:.4f}")
-    print(f"Runtime (s): {runtime:.2f}")
+    print("\nTraining complete")
+    print("Runtime:", runtime)
 
 
 if __name__ == "__main__":

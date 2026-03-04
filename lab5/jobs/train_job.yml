@@ -8,18 +8,23 @@ code: ../src
 
 command: >
   python train.py
-  --feature_data ${{inputs.feature_data}}
-  --label_data ${{inputs.label_data}}
+  --train_data ${{inputs.train_data}}
+  --val_data ${{inputs.val_data}}
+  --test_data ${{inputs.test_data}}
   --output ${{outputs.model_output}}
 
 inputs:
-  feature_data:
+  train_data:
     type: uri_folder
     path: azureml:amazon_review_merged_features_train@latest
 
-  label_data:
+  val_data:
     type: uri_folder
-    path: azureml:amazon_electronics_features_v1_sampled@latest
+    path: azureml:amazon_review_merged_features_val@latest
+
+  test_data:
+    type: uri_folder
+    path: azureml:amazon_review_merged_features_test@latest
 
 outputs:
   model_output:
