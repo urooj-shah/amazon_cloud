@@ -262,7 +262,7 @@ def main():
     mlflow.log_param("model", "SGDClassifier_logistic")
     mlflow.log_param("feature_type", "sbert+tfidf+sentiment+length")
     mlflow.log_param("feature_dimension", int(X_train.shape[1]))
-
+    mlflow.log_param("data_split", "60_15_15_10")
     mlflow.log_param("train_rows", int(X_train.shape[0]))
     mlflow.log_param("val_rows", int(X_val.shape[0]))
     mlflow.log_param("test_rows", int(X_test.shape[0]))
