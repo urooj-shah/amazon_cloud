@@ -1,0 +1,59 @@
+$schema: https://azuremlschemas.azureedge.net/latest/sweepJob.schema.json
+type: sweep
+
+display_name: amazon_review_hyperparameter_sweep
+experiment_name: amazon_review_training_experiment
+
+compute: azureml:cpu-cluster-2
+
+trial:
+  code: ../src
+  command: >
+    python train.py
+    --train_data ${{inputs.train_data}}/data.parquet
+    --val_data ${{inputs.val_data}}/data.parquet
+    --test_data ${{inputs.test_data}}/data.parquet
+    --alpha ${{search_space.alpha}}
+    --max_iter ${{search_space.max_iter}}
+    --output ${{outputs.model_output}}
+
+  environment:
+    image: mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu20.04
+    conda_file: ../env/conda.yml
+
+inputs:
+  train_data:
+    type: uri_folder
+    path: azureml:amazon_review_merged_features_train@latest
+
+  val_data:
+    type: uri_folder
+    path: azureml:amazon_review_merged_features_val@latest
+
+  test_data:
+    type: uri_folder
+    path: azureml:amazon_review_merged_features_test@latest
+
+outputs:
+  model_output:
+    type: uri_folder
+
+search_space:
+  alpha:
+    type: uniform
+    min_value: 0.0001
+    max_value: 0.01
+
+  max_iter:
+    type: choice
+    values: [500, 1000, 1500]
+
+sampling_algorithm: random
+
+objective:
+  primary_metric: val_accuracy
+  goal: maximize
+
+limits:
+  max_total_trials: 8
+  max_concurrent_trials: 2
